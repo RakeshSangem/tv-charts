@@ -2,9 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Calendar, BarChart3 } from "lucide-react";
 
 const ChartFooter = ({
-  timeframes,
-  selectedTimeframe,
-  onTimeframeChange,
   periods,
   selectedPeriod,
   onPeriodChange,
@@ -45,25 +42,9 @@ const ChartFooter = ({
   }, []);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 h-14 bg-slate-900 border-t border-slate-800 px-4 flex items-center justify-between z-20">
-      <div className="flex items-center space-x-1">
-        {timeframes.map((timeframe) => (
-          <button
-            key={timeframe.value}
-            onClick={() => onTimeframeChange(timeframe.value)}
-            className={`px-2 py-1 text-sm font-medium rounded-md transition-colors ${
-              selectedTimeframe === timeframe.value
-                ? "bg-indigo-500 text-white"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            }`}
-          >
-            {timeframe.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center space-x-1">
-        {periods.map((period) => (
+    <div className="flex items-center space-x-1">
+      <div className="bg-slate-900 border-t border-slate-800 px-4 flex items-center justify-between">
+        {periods?.map((period) => (
           <button
             key={period.value}
             onClick={() => onPeriodChange(period.value)}

@@ -169,7 +169,7 @@ const IndicatorConfig = ({ indicator, onConfigChange, onClose }) => {
   };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="space-y-4">
       <h3 className="text-lg font-medium text-slate-200">
         {indicator.name} Settings
       </h3>

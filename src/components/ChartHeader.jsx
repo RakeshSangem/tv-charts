@@ -1,140 +1,88 @@
 import React, { useState } from "react";
-import {
-  Play,
-  Pause,
-  Settings,
-  BarChart3,
-  TrendingUp,
-  Calendar,
-  Maximize2,
-  Download,
-} from "lucide-react";
-import { indicators } from "../constants/indicators";
+import { BarChart3, Settings, Play, Pause } from "lucide-react";
+import TimeframeSelector from "./TimeframeSelector.jsx";
+import IndicatorsModal from "./IndicatorsModal";
 
 const ChartHeader = ({
   isLive,
-  currentPrice,
   change,
   percentChange,
-  smaValue,
   toggleLive,
   selectedTimeframe,
   setSelectedTimeframe,
-  timeframes = [],
+  timeframes,
   onSelectIndicator,
+  isIndicatorsModalOpen,
+  setIsIndicatorsModalOpen,
 }) => {
-  const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
-  const isPositive = change > 0;
-  const isNegative = change < 0;
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+
+  const tooltipText = isLive ? "Pause Live Data" : "Resume Live Data";
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-slate-900/95 to-slate-900/50 backdrop-blur-lg border-b border-slate-700/50">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center space-x-6">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
-              <TrendingUp className="w-5 h-5 text-white" />
+    <div className="absolute top-0 left-0 right-0 h-12 z-20 bg-gradient-to-b from-slate-900/95 to-slate-900/50 backdrop-blur-lg border-b border-slate-700/50">
+      <div className="flex items-center justify-between px-3 h-full">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-500/20 text-indigo-400 text-sm font-bold">
+              N50
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold text-slate-100">NIFTY 50</h1>
-                <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-md text-xs font-medium">
-                  NSE
-                </span>
-                {isLive && (
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span
-                      className={`text-xl font-bold ${isPositive ? "text-green-400" : isNegative ? "text-red-400" : "text-slate-300"}`}
-                    >
-                      {currentPrice}
-                    </span>
-                    <span
-                      className={`text-sm ${isPositive ? "text-green-300" : isNegative ? "text-red-300" : "text-slate-400"}`}
-                    >
-                      {change} (
-                      <span className="font-medium">{percentChange}%</span>)
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="text-slate-400 text-xs mt-1">
-                MA 9 close 0 SMA 9{" "}
-                <span className="text-blue-400 font-medium">{smaValue}</span>
-              </div>
+              <h1 className="text-base font-bold text-slate-100">NIFTY 50</h1>
+              <p
+                className={
+                  change > 0 ? "text-green-500 text-xs" : "text-red-500 text-xs"
+                }
+              >
+                {change > 0 ? "+" : ""} {change} ({percentChange}%)
+              </p>
             </div>
           </div>
-
-          <div className="hidden sm:flex items-center space-x-1 p-1 bg-slate-800/70 rounded-lg border border-slate-700/70">
-            {timeframes.map((tf) => (
-              <button
-                key={tf.value}
-                onClick={() => setSelectedTimeframe(tf.value)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors duration-200 ${tf.value === selectedTimeframe ? "bg-indigo-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-700 active:bg-slate-700/80"}`}
-              >
-                {tf.label}
-              </button>
-            ))}
+          <div className="relative">
+            <button
+              onClick={toggleLive}
+              className="p-1.5 rounded-md text-slate-300 hover:bg-slate-700/50 transition-colors"
+              onMouseEnter={() => setIsTooltipVisible(true)}
+              onMouseLeave={() => setIsTooltipVisible(false)}
+            >
+              {isLive ? (
+                <Pause size={18} className="text-red-500" />
+              ) : (
+                <Play size={18} className="text-green-500" />
+              )}
+            </button>
+            {isTooltipVisible && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-slate-700 text-slate-200 text-xs rounded shadow-lg whitespace-nowrap">
+                {tooltipText}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
+          <TimeframeSelector
+            selectedTimeframe={selectedTimeframe}
+            onTimeframeChange={setSelectedTimeframe}
+            timeframes={timeframes}
+          />
           <button
             onClick={() => setIsIndicatorsModalOpen(true)}
-            className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors"
+            className="p-1.5 rounded-md text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center space-x-1"
           >
-            <BarChart3 className="w-5 h-5" />
+            <BarChart3 size={18} />
+            <span className="text-sm hidden sm:inline">Indicators</span>
           </button>
-          <button className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors">
-            <Settings className="w-5 h-5" />
-          </button>
-          <button className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors">
-            <Maximize2 className="w-5 h-5" />
-          </button>
-          <button className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors">
-            <Download className="w-5 h-5" />
-          </button>
-          <button
-            onClick={toggleLive}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 shadow-md ${isLive ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
-          >
-            {isLive ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            <span>{isLive ? "Stop Live" : "Start Live"}</span>
+          <button className="p-1.5 rounded-md text-slate-300 hover:bg-slate-700/50 transition-colors">
+            <Settings size={18} />
           </button>
         </div>
       </div>
 
-      {isIndicatorsModalOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-30">
-          <div className="p-4">
-            <h2 className="text-lg font-medium text-slate-200 mb-4">
-              Add Indicator
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {indicators.map((indicator) => (
-                <button
-                  key={indicator.id}
-                  onClick={() => {
-                    onSelectIndicator(indicator);
-                    setIsIndicatorsModalOpen(false);
-                  }}
-                  className="p-3 text-left rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
-                >
-                  <div className="font-medium text-slate-200">
-                    {indicator.name}
-                  </div>
-                  <div className="text-sm text-slate-400">
-                    {indicator.description}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <IndicatorsModal
+        isOpen={isIndicatorsModalOpen}
+        onClose={() => setIsIndicatorsModalOpen(false)}
+        onSelectIndicator={onSelectIndicator}
+      />
     </div>
   );
 };
