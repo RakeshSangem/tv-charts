@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Play,
   Pause,
@@ -9,6 +9,7 @@ import {
   Maximize2,
   Download,
 } from "lucide-react";
+import { indicators } from "../constants/indicators";
 
 const ChartHeader = ({
   isLive,
@@ -19,13 +20,15 @@ const ChartHeader = ({
   toggleLive,
   selectedTimeframe,
   setSelectedTimeframe,
-  timeframes,
+  timeframes = [],
+  onSelectIndicator,
 }) => {
+  const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
   const isPositive = change > 0;
   const isNegative = change < 0;
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-slate-900/95 to-slate-900/50 backdrop-blur-lg border-b border-slate-700/50 pb-3">
+    <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-slate-900/95 to-slate-900/50 backdrop-blur-lg border-b border-slate-700/50">
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-3">
@@ -75,6 +78,12 @@ const ChartHeader = ({
         </div>
 
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setIsIndicatorsModalOpen(true)}
+            className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors"
+          >
+            <BarChart3 className="w-5 h-5" />
+          </button>
           <button className="p-2 rounded-full text-slate-400 hover:bg-slate-700/60 transition-colors">
             <Settings className="w-5 h-5" />
           </button>
@@ -97,6 +106,35 @@ const ChartHeader = ({
           </button>
         </div>
       </div>
+
+      {isIndicatorsModalOpen && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-30">
+          <div className="p-4">
+            <h2 className="text-lg font-medium text-slate-200 mb-4">
+              Add Indicator
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              {indicators.map((indicator) => (
+                <button
+                  key={indicator.id}
+                  onClick={() => {
+                    onSelectIndicator(indicator);
+                    setIsIndicatorsModalOpen(false);
+                  }}
+                  className="p-3 text-left rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
+                >
+                  <div className="font-medium text-slate-200">
+                    {indicator.name}
+                  </div>
+                  <div className="text-sm text-slate-400">
+                    {indicator.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
