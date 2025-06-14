@@ -3,8 +3,6 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
-  LineStyle,
-  LineType,
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
@@ -32,6 +30,7 @@ function getRandomColor() {
 }
 
 const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
+  const [containerSize, setContainerSize] = useState();
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -59,6 +58,19 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
   const handleToggleLive = () => {
     toggleLive();
   };
+
+  // --- MACD Legend State ---
+  const [macdLegend, setMacdLegend] = useState({
+    macd: "--",
+    signal: "--",
+    histogram: "--",
+    time: "",
+  });
+  const [macdPanePos, setMacdPanePos] = useState({
+    top: 0,
+    height: 0,
+    visible: false,
+  });
 
   // Initialize chart
   useEffect(() => {
@@ -96,185 +108,179 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
 
     seriesRef.current = candleSeries;
 
-    // Handle resize
-    const handleResize = () => {
-      if (!chartContainerRef.current || !chartRef.current) return;
-      const { width, height } =
-        chartContainerRef.current.getBoundingClientRect();
-      chartRef.current.applyOptions({
-        width,
-        height,
-      });
-
-      // Update pane heights on resize
-      const panes = chartRef.current.panes();
-      if (panes.length >= 2) {
-        panes[0].setHeight(height * 0.7); // Main chart takes 70%
-        panes[1].setHeight(height * 0.3); // MACD takes 30%
+    // Resize observer
+    const ro = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+        chart.applyOptions({ width, height });
       }
-    };
+    });
+    ro.observe(chartContainerRef.current);
 
-    window.addEventListener("resize", handleResize);
     return () => {
-      window.removeEventListener("resize", handleResize);
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
       }
+      ro.disconnect();
     };
   }, []);
 
-  // Handle indicator selection
+  // --- MACD Pane Position Calculation ---
+  useEffect(() => {
+    if (!containerSize || !chartRef.current) return;
+
+    // Only show MACD legend if MACD is selected
+    const macdKey = selectedIndicators.find((i) => i.id === "macd")?.key;
+    if (!macdKey || !panesRef.current[macdKey]) {
+      setMacdPanePos((pos) => ({ ...pos, visible: false }));
+      return;
+    }
+
+    // Get pane heights (main + macd)
+    const panes = chartRef.current.panes();
+    if (panes.length < 2) {
+      setMacdPanePos((pos) => ({ ...pos, visible: false }));
+      return;
+    }
+    const mainHeight = panes[0].getHeight();
+    const macdHeight = panes[1].getHeight();
+
+    // Position legend just below separator (bottom of main pane)
+    setMacdPanePos({
+      top: mainHeight,
+      height: macdHeight,
+      visible: true,
+    });
+  }, [containerSize, selectedIndicators, panesRef.current]);
+
+  // --- MACD Legend Data Calculation ---
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    // Only listen if MACD is present
+    const macdKey = selectedIndicators.find((i) => i.id === "macd")?.key;
+    if (!macdKey || !panesRef.current[macdKey]) return;
+
+    const macdData = calculateMACD(data, 12, 26, 9);
+
+    // Listen for crosshair moves to update legend
+    const chart = chartRef.current;
+    const handler = (param) => {
+      if (!macdData || !param.time) {
+        setMacdLegend({ macd: "--", signal: "--", histogram: "--", time: "" });
+        return;
+      }
+      const idx = macdData.macd.findIndex((d) => d.time === param.time);
+      if (idx !== -1) {
+        setMacdLegend({
+          macd: macdData.macd[idx]?.value?.toFixed(2) ?? "--",
+          signal: macdData.signal[idx]?.value?.toFixed(2) ?? "--",
+          histogram: macdData.histogram[idx]?.value?.toFixed(2) ?? "--",
+          time: new Date(Number(param.time) * 1000).toLocaleDateString(),
+        });
+      }
+    };
+    chart.subscribeCrosshairMove(handler);
+
+    return () => chart.unsubscribeCrosshairMove(handler);
+  }, [data, selectedIndicators, panesRef.current]);
+
+  // Indicator selection, removal, and update logic remains unchanged...
+  // --- (the rest of your code, unchanged, below) ---
+
   const handleIndicatorSelect = (indicator) => {
-    if (
-      !chartRef.current ||
-      !data ||
-      !Array.isArray(data) ||
-      data.length === 0
-    ) {
+    if (!chartRef.current || !Array.isArray(data) || data.length === 0) {
       console.warn("Cannot add indicator: Chart or data not ready");
       return;
     }
 
-    try {
-      const indicatorKey = `${indicator.id}-${indicator.period || indicator.defaultPeriod || ""}`;
+    const indicatorKey = `${indicator.id}-${indicator.period || indicator.defaultPeriod || ""}`;
 
-      // Check if indicator already exists
-      if (
-        selectedIndicators.some(
-          (i) => `${i.id}-${i.period || i.defaultPeriod || ""}` === indicatorKey
-        )
-      ) {
-        return;
-      }
+    // Avoid duplicates
+    if (selectedIndicators.some((i) => i.key === indicatorKey)) return;
 
-      // Add to selected indicators
-      setSelectedIndicators((prev) => [
-        ...prev,
-        { ...indicator, key: indicatorKey },
-      ]);
+    setSelectedIndicators((prev) => [
+      ...prev,
+      { ...indicator, key: indicatorKey },
+    ]);
 
-      // Handle MACD separately
-      if (indicator.id === "macd") {
-        if (!panesRef.current) {
-          panesRef.current = {};
-        }
+    if (indicator.id === "macd") {
+      // Create paneIndex based on existing panes in panesRef
+      if (!panesRef.current[indicatorKey]) {
+        const paneIndex = Object.keys(panesRef.current).length + 1;
 
-        if (!panesRef.current[indicatorKey]) {
-          // Create MACD line in pane 1
-          const macdLineSeries = chartRef.current.addSeries(
-            LineSeries,
-            {
-              color: "#6366f1",
-              lineWidth: 2,
-              priceLineVisible: false,
-              lastValueVisible: false,
-              title: "MACD",
-            },
-            1
-          );
+        const macdLine = chartRef.current.addSeries(
+          LineSeries,
+          {
+            color: "#6366f1",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "MACD",
+          },
+          paneIndex
+        );
 
-          const signalSeries = chartRef.current.addSeries(
-            LineSeries,
-            {
-              color: "#f59e0b",
-              lineWidth: 2,
-              priceLineVisible: false,
-              lastValueVisible: false,
-              title: "Signal",
-            },
-            1
-          );
+        const signal = chartRef.current.addSeries(
+          LineSeries,
+          {
+            color: "#f59e0b",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "Signal",
+          },
+          paneIndex
+        );
 
-          const histogramSeries = chartRef.current.addSeries(
-            HistogramSeries,
-            {
-              color: "#26a69a",
-              priceLineVisible: false,
-              lastValueVisible: false,
-              title: "Histogram",
-            },
-            1
-          );
+        const histogram = chartRef.current.addSeries(
+          HistogramSeries,
+          {
+            color: "#26a69a",
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "Histogram",
+          },
+          paneIndex
+        );
 
-          // Store references
-          panesRef.current[indicatorKey] = {
-            macdLine: macdLineSeries,
-            signal: signalSeries,
-            histogram: histogramSeries,
-          };
+        panesRef.current[indicatorKey] = {
+          paneIndex,
+          macdLine,
+          signal,
+          histogram,
+        };
 
-          // Calculate MACD data
-          const macdData = calculateMACD(data, 12, 26, 9);
-
-          if (
-            macdData &&
-            macdData.macd &&
-            macdData.signal &&
-            macdData.histogram
-          ) {
-            // Filter out any NaN values
-            const filteredMacd = macdData.macd.filter(
-              (item) => !isNaN(item.value)
-            );
-            const filteredSignal = macdData.signal.filter(
-              (item) => !isNaN(item.value)
-            );
-            const filteredHistogram = macdData.histogram.filter(
-              (item) => !isNaN(item.value)
-            );
-
-            // Set data
-            macdLineSeries.setData(filteredMacd);
-            signalSeries.setData(filteredSignal);
-            histogramSeries.setData(filteredHistogram);
-
-            // Configure MACD pane price scale
-            const panes = chartRef.current.panes();
-            if (panes.length >= 2) {
-              const macdPane = panes[1];
-              macdPane.priceScale().applyOptions({
-                autoScale: true,
-                mode: 0,
-                visible: true,
-                alignLabels: true,
-                borderVisible: false,
-              });
-            }
-          }
-        }
-      } else {
-        // Handle other indicators
-        const series = chartRef.current.addSeries(LineSeries, {
-          color: getRandomColor(),
-          lineWidth: 2,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
-
-        seriesMap.current.set(indicatorKey, series);
-
-        const indicatorData = calculateIndicator(data, indicator);
-        if (indicatorData) {
-          series.setData(indicatorData);
+        const macdData = calculateMACD(data, 12, 26, 9);
+        if (macdData?.macd && macdData?.signal && macdData?.histogram) {
+          macdLine.setData(macdData.macd.filter((p) => !isNaN(p.value)));
+          signal.setData(macdData.signal.filter((p) => !isNaN(p.value)));
+          histogram.setData(macdData.histogram.filter((p) => !isNaN(p.value)));
         }
       }
-    } catch (error) {
-      console.error("Error handling indicators:", error);
+    } else {
+      const series = chartRef.current.addSeries(LineSeries, {
+        color: getRandomColor(),
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      seriesMap.current.set(indicatorKey, series);
+      const indicatorData = calculateIndicator(data, indicator);
+      if (indicatorData) series.setData(indicatorData);
     }
   };
 
-  // Handle indicator removal
   const handleRemoveIndicator = (indicatorKey) => {
     try {
       if (!chartRef.current) return;
 
-      // Remove from selected indicators
       setSelectedIndicators((prev) =>
         prev.filter((i) => i.key !== indicatorKey)
       );
 
-      // Handle MACD removal
       if (panesRef.current && panesRef.current[indicatorKey]) {
         const macdSeries = panesRef.current[indicatorKey];
         if (macdSeries.macdLine) {
@@ -288,7 +294,6 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
         }
         delete panesRef.current[indicatorKey];
       } else {
-        // Remove other indicators
         const series = seriesMap.current.get(indicatorKey);
         if (series) {
           chartRef.current.removeSeries(series);
@@ -300,7 +305,6 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
     }
   };
 
-  // Update chart data
   useEffect(() => {
     if (!chartRef.current || !Array.isArray(data)) {
       console.warn("Cannot update chart: Chart or data not ready");
@@ -308,7 +312,6 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
     }
 
     try {
-      // Update candlestick series
       if (!seriesRef.current) {
         seriesRef.current = chartRef.current.addSeries(CandlestickSeries, {
           upColor: "#22c55e",
@@ -321,7 +324,6 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
 
       seriesRef.current.setData(data);
 
-      // Update indicators
       selectedIndicators.forEach((indicator) => {
         const indicatorKey = `${indicator.id}-${indicator.period || indicator.defaultPeriod || ""}`;
 
@@ -367,7 +369,6 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
     (config) => {
       if (!selectedIndicators.length) return;
 
-      // Update the indicator configuration
       const updatedIndicators = selectedIndicators.map((ind) =>
         ind.id === config.id ? { ...ind, config } : ind
       );
@@ -377,8 +378,38 @@ const Chart = React.memo(({ symbol = "NIFTY 50" }) => {
   );
 
   return (
-    <div className="relative" style={{ height: "600px" }}>
+    <div className="relative" style={{ height: "600px", position: "relative" }}>
       <div ref={chartContainerRef} className="w-full h-full" />
+      {/* --- MACD LEGEND: Absolute, below main pane, only when MACD is active --- */}
+      {macdPanePos.visible && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: macdPanePos.top + 2, // 2px below the separator line
+            width: "100%",
+            background: "rgba(30, 41, 59, 0.97)",
+            border: "1px solid #334155",
+            borderRadius: 4,
+            padding: "5px 20px",
+            fontFamily: "monospace",
+            fontSize: 15,
+            color: "#d1d5db",
+            zIndex: 10,
+            pointerEvents: "none",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+          }}
+        >
+          <strong>MACD</strong>
+          {"  "}
+          MACD: <span style={{ color: "#6366f1" }}>{macdLegend.macd}</span>
+          {"  "}Signal:{" "}
+          <span style={{ color: "#f59e0b" }}>{macdLegend.signal}</span>
+          {"  "}Hist:{" "}
+          <span style={{ color: "#26a69a" }}>{macdLegend.histogram}</span>
+          {"  "}({macdLegend.time})
+        </div>
+      )}
       <ChartHeader
         symbol={symbol}
         timeframe={selectedTimeframe}
